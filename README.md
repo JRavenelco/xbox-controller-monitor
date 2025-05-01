@@ -28,7 +28,7 @@ Si el comando anterior no funciona, prueba con:
 ## Uso
 
 1. Conecta un control de Xbox a tu computadora
-2. Ejecuta el script: python `xbox_controller.py`
+2. Ejecuta el script: `python xbox_controller.py`
 3. Mueve los sticks, presiona botones o gatillos para ver la información en tiempo real
 4. Presiona Ctrl+C para salir
 
