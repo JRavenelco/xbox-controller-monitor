@@ -31,30 +31,40 @@ print(f"Número de hats (D-Pads): {joystick.get_numhats()}")
 
 # Map Pygame button indices to descriptive names
 # This mapping might vary slightly depending on the controller model and OS
-# Common Linux mapping for Xbox 360/One controllers:
+# Adjusted based on user feedback for specific Linux mapping:
 button_map = {
     0: "A (Verde)",
     1: "B (Rojo)",
-    2: "X (Azul)",
-    3: "Y (Amarillo)",
-    4: "LB",
-    5: "RB",
-    6: "Back/Select",
-    7: "Start",
-    8: "Xbox/Guide", # Might not always be detected by pygame or require special handling
-    9: "Stick Izq (presionado)",
-    10: "Stick Der (presionado)",
+    2: "Back/Select",     # Was original X (2)
+    3: "X (Azul)",        # Was original Y (3)
+    4: "Y (Amarillo)",    # Was original LB (4)
+    5: "Start",           # Was original RB (5)
+    6: "LB",              # Was original Back/Select (6)
+    7: "RB",              # Was original Start (7)
+    # 8: "Xbox/Guide",    # Original index 8, now mapped to 12
+    # Indices 9 is likely unused
+    10: "Botón Vista",     # New mapping for index 10
+    11: "Botón Menú",      # New mapping for index 11
+    12: "Botón Xbox",      # New mapping for index 12 (replaces old index 8)
+    13: "Stick Izq (presionado)",
+    14: "Stick Der (presionado)",
+    15: "Botón Compartir", # New mapping for index 15
 }
 
 # Map Pygame axis indices - Check these with your specific controller
 # Common Linux mapping:
 AXIS_LEFT_STICK_X = 0
 AXIS_LEFT_STICK_Y = 1
-AXIS_RIGHT_STICK_X = 3 # Often 3 or 2
-AXIS_RIGHT_STICK_Y = 4 # Often 4 or 3
+# --- Potential Swap ---
+# Original: AXIS_RIGHT_STICK_X = 3, AXIS_RIGHT_STICK_Y = 4
+# Original: AXIS_LEFT_TRIGGER = 2, AXIS_RIGHT_TRIGGER = 5
+# Swapped values:
+AXIS_RIGHT_STICK_X = 2 # Often 2 or 3
+AXIS_RIGHT_STICK_Y = 3 # Often 3 or 4
 # Triggers might be axes 2 and 5. Value ranges from -1.0 (released) to 1.0 (fully pressed).
-AXIS_LEFT_TRIGGER = 2  # Often 2 or 5
-AXIS_RIGHT_TRIGGER = 5 # Often 5 or 4
+AXIS_LEFT_TRIGGER = 5  # Often 5 or 2
+AXIS_RIGHT_TRIGGER = 4 # Often 4 or 5
+# --- End Potential Swap ---
 
 # Map Pygame hat indices (usually only one hat, index 0 for D-Pad)
 HAT_DPAD = 0
@@ -97,9 +107,11 @@ try:
         # --- Read Current State ---
         # Buttons
         current_buttons_pressed = set()
+        # Adjust range if necessary, but typically get_numbuttons() is correct
         for i in range(joystick.get_numbuttons()):
             if joystick.get_button(i):
-                current_buttons_pressed.add(button_map.get(i, f"Botón {i}")) # Use mapping or index
+                # Use the updated map, provide default if index not in map
+                current_buttons_pressed.add(button_map.get(i, f"Botón {i}"))
 
         # D-Pad (Hat)
         current_dpad_state = (0, 0)
@@ -114,7 +126,8 @@ try:
         else:
             current_left_stick_x = 0.0
         if joystick.get_numaxes() > AXIS_LEFT_STICK_Y:
-            current_left_stick_y = joystick.get_axis(AXIS_LEFT_STICK_Y)
+            # Invert Y axis value
+            current_left_stick_y = joystick.get_axis(AXIS_LEFT_STICK_Y) * -1.0
         else:
             current_left_stick_y = 0.0
         current_left_stick = (current_left_stick_x, current_left_stick_y)
@@ -126,7 +139,8 @@ try:
         else:
             current_right_stick_x = 0.0
         if joystick.get_numaxes() > AXIS_RIGHT_STICK_Y:
-            current_right_stick_y = joystick.get_axis(AXIS_RIGHT_STICK_Y)
+            # Invert Y axis value
+            current_right_stick_y = joystick.get_axis(AXIS_RIGHT_STICK_Y) * -1.0
         else:
             current_right_stick_y = 0.0
         current_right_stick = (current_right_stick_x, current_right_stick_y)
@@ -163,41 +177,41 @@ try:
             last_dpad_state = current_dpad_state
 
         # Left Stick
-        left_stick_x_moved = abs(current_left_stick[0]) > STICK_THRESHOLD or abs(current_left_stick[0] - last_left_stick[0]) > 0.05 # Detect small changes too
-        left_stick_y_moved = abs(current_left_stick[1]) > STICK_THRESHOLD or abs(current_left_stick[1] - last_left_stick[1]) > 0.05
-        if left_stick_x_moved or left_stick_y_moved:
-             # Only print if value is significant or changed significantly
-            if abs(current_left_stick[0]) > STICK_THRESHOLD or abs(current_left_stick[1]) > STICK_THRESHOLD or left_stick_x_moved or left_stick_y_moved:
-                 print(f"Stick Izq: X={current_left_stick[0]:>6.3f}, Y={current_left_stick[1]:>6.3f}")
-                 last_left_stick = current_left_stick
-        elif abs(last_left_stick[0]) > 0 or abs(last_left_stick[1]) > 0: # Print return to center
-             print(f"Stick Izq: X={0.0:>6.3f}, Y={0.0:>6.3f}")
-             last_left_stick = (0.0, 0.0)
+        left_stick_changed = last_left_stick != current_left_stick
+        # Check if the current state is "active" (moved beyond threshold)
+        left_stick_active = abs(current_left_stick[0]) > STICK_THRESHOLD or abs(current_left_stick[1]) > STICK_THRESHOLD
+
+        if left_stick_changed:
+            if left_stick_active:
+                # Print only if changed AND active
+                print(f"Stick Izq: X={current_left_stick[0]:>6.3f}, Y={current_left_stick[1]:>6.3f}")
+            # Always update the last state if it changed, regardless of printing
+            last_left_stick = current_left_stick
 
 
         # Right Stick
-        right_stick_x_moved = abs(current_right_stick[0]) > STICK_THRESHOLD or abs(current_right_stick[0] - last_right_stick[0]) > 0.05
-        right_stick_y_moved = abs(current_right_stick[1]) > STICK_THRESHOLD or abs(current_right_stick[1] - last_right_stick[1]) > 0.05
-        if right_stick_x_moved or right_stick_y_moved:
-            if abs(current_right_stick[0]) > STICK_THRESHOLD or abs(current_right_stick[1]) > STICK_THRESHOLD or right_stick_x_moved or right_stick_y_moved:
+        right_stick_changed = last_right_stick != current_right_stick
+        # Check if the current state is "active" (moved beyond threshold)
+        right_stick_active = abs(current_right_stick[0]) > STICK_THRESHOLD or abs(current_right_stick[1]) > STICK_THRESHOLD
+
+        if right_stick_changed:
+            if right_stick_active:
+                # Print only if changed AND active
                 print(f"Stick Der: X={current_right_stick[0]:>6.3f}, Y={current_right_stick[1]:>6.3f}")
-                last_right_stick = current_right_stick
-        elif abs(last_right_stick[0]) > 0 or abs(last_right_stick[1]) > 0: # Print return to center
-             print(f"Stick Der: X={0.0:>6.3f}, Y={0.0:>6.3f}")
-             last_right_stick = (0.0, 0.0)
+            # Always update the last state if it changed, regardless of printing
+            last_right_stick = current_right_stick
 
         # Triggers
-        left_trigger_changed = abs(current_triggers[0] - last_triggers[0]) > TRIGGER_THRESHOLD
-        right_trigger_changed = abs(current_triggers[1] - last_triggers[1]) > TRIGGER_THRESHOLD
+        triggers_changed = last_triggers != current_triggers
+        # Check if the current state is "active" (pressed beyond threshold)
+        triggers_active = current_triggers[0] > TRIGGER_THRESHOLD or current_triggers[1] > TRIGGER_THRESHOLD
 
-        if left_trigger_changed or right_trigger_changed:
-             # Only print if value is significant or changed significantly
-             if current_triggers[0] > TRIGGER_THRESHOLD or current_triggers[1] > TRIGGER_THRESHOLD or left_trigger_changed or right_trigger_changed:
+        if triggers_changed:
+            if triggers_active:
+                 # Print only if changed AND active
                  print(f"Gatillos: LT={current_triggers[0]:>5.3f}, RT={current_triggers[1]:>5.3f}")
-                 last_triggers = current_triggers
-        elif last_triggers[0] > 0 or last_triggers[1] > 0: # Print return to zero
-             print(f"Gatillos: LT={0.0:>5.3f}, RT={0.0:>5.3f}")
-             last_triggers = (0.0, 0.0)
+            # Always update the last state if it changed, regardless of printing
+            last_triggers = current_triggers
 
 
         # Small delay to prevent high CPU usage
