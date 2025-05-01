@@ -21,14 +21,14 @@ Un script de Python que monitorea y muestra en tiempo real la actividad de un co
 
 1. Clona este repositorio o descarga el archivo `xbox_controller.py`
 2. Instala las dependencias:
-pip install XInput-Python
+`pip install XInput-Python`
 Si el comando anterior no funciona, prueba con:
-pip install pygame-xinput
+`pip install pygame-xinput`
 
 ## Uso
 
 1. Conecta un control de Xbox a tu computadora
-2. Ejecuta el script:
+2. Ejecuta el script: python `xbox_controller.py`
 3. Mueve los sticks, presiona botones o gatillos para ver la información en tiempo real
 4. Presiona Ctrl+C para salir
 
