@@ -3,11 +3,15 @@ import time
 import os
 
 # --- Pygame Configuration ---
+# Force SDL to use the dummy video driver if no display is available
+os.environ['SDL_VIDEODRIVER'] = 'dummy' # <--- Añade esta línea
+
 # Center the Pygame window (optional, needed for event processing)
 # os.environ['SDL_VIDEO_CENTERED'] = '1' # Not strictly necessary for console output
 pygame.init()
 pygame.joystick.init()
-pygame.display.set_mode((1, 1), pygame.NOFRAME) # Añade esta línea para inicializar el sistema de video sin mostrar ventana
+# Initialize display even with dummy driver for event processing
+pygame.display.set_mode((1, 1)) # Puedes mantener o quitar pygame.NOFRAME, el dummy driver lo maneja
 
 print("Monitoreando señales del control de Xbox (Ctrl+C para salir)")
 print("Mueve los sticks y presiona botones para ver sus valores")
