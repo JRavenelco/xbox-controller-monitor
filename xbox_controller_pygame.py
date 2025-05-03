@@ -79,6 +79,11 @@ last_dpad_state = (0, 0)
 last_left_stick = (0.0, 0.0)
 last_right_stick = (0.0, 0.0)
 last_triggers = (0.0, 0.0) # Normalized 0.0 to 1.0
+# Track previous active state to print return-to-zero
+was_left_stick_active = False
+was_right_stick_active = False
+was_triggers_active = False
+
 
 # --- Helper Function ---
 def normalize_trigger(value):
@@ -178,39 +183,45 @@ try:
 
         # Left Stick
         left_stick_changed = last_left_stick != current_left_stick
-        # Check if the current state is "active" (moved beyond threshold)
         left_stick_active = abs(current_left_stick[0]) > STICK_THRESHOLD or abs(current_left_stick[1]) > STICK_THRESHOLD
 
         if left_stick_changed:
             if left_stick_active:
-                # Print only if changed AND active
                 print(f"Stick Izq: X={current_left_stick[0]:>6.3f}, Y={current_left_stick[1]:>6.3f}")
-            # Always update the last state if it changed, regardless of printing
+                was_left_stick_active = True
+            elif was_left_stick_active:
+                # Print explicit zero state when returning to inactive
+                print(f"Stick Izq: X={0.0:>6.3f}, Y={0.0:>6.3f}")
+                was_left_stick_active = False
             last_left_stick = current_left_stick
 
 
         # Right Stick
         right_stick_changed = last_right_stick != current_right_stick
-        # Check if the current state is "active" (moved beyond threshold)
         right_stick_active = abs(current_right_stick[0]) > STICK_THRESHOLD or abs(current_right_stick[1]) > STICK_THRESHOLD
 
         if right_stick_changed:
             if right_stick_active:
-                # Print only if changed AND active
                 print(f"Stick Der: X={current_right_stick[0]:>6.3f}, Y={current_right_stick[1]:>6.3f}")
-            # Always update the last state if it changed, regardless of printing
+                was_right_stick_active = True
+            elif was_right_stick_active:
+                 # Print explicit zero state when returning to inactive
+                print(f"Stick Der: X={0.0:>6.3f}, Y={0.0:>6.3f}")
+                was_right_stick_active = False
             last_right_stick = current_right_stick
 
         # Triggers
         triggers_changed = last_triggers != current_triggers
-        # Check if the current state is "active" (pressed beyond threshold)
         triggers_active = current_triggers[0] > TRIGGER_THRESHOLD or current_triggers[1] > TRIGGER_THRESHOLD
 
         if triggers_changed:
             if triggers_active:
-                 # Print only if changed AND active
                  print(f"Gatillos: LT={current_triggers[0]:>5.3f}, RT={current_triggers[1]:>5.3f}")
-            # Always update the last state if it changed, regardless of printing
+                 was_triggers_active = True
+            elif was_triggers_active:
+                 # Print explicit zero state when returning to inactive
+                 print(f"Gatillos: LT={0.0:>5.3f}, RT={0.0:>5.3f}")
+                 was_triggers_active = False
             last_triggers = current_triggers
 
 
