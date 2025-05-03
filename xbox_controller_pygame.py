@@ -7,6 +7,7 @@ import os
 # os.environ['SDL_VIDEO_CENTERED'] = '1' # Not strictly necessary for console output
 pygame.init()
 pygame.joystick.init()
+pygame.display.set_mode((1, 1), pygame.NOFRAME) # Añade esta línea para inicializar el sistema de video sin mostrar ventana
 
 print("Monitoreando señales del control de Xbox (Ctrl+C para salir)")
 print("Mueve los sticks y presiona botones para ver sus valores")
