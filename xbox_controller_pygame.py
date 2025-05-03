@@ -83,17 +83,27 @@ last_buttons_pressed = set()
 last_dpad_state = (0, 0)
 last_left_stick = (0.0, 0.0)
 last_right_stick = (0.0, 0.0)
-last_triggers = (0.0, 0.0) # Normalized 0.0 to 1.0
 # Track previous active state to print return-to-zero
 was_left_stick_active = False
 was_right_stick_active = False
-was_triggers_active = False
-
 
 # --- Helper Function ---
 def normalize_trigger(value):
     """Converts pygame trigger axis value (-1 to 1) to 0.0 to 1.0"""
     return (value + 1.0) / 2.0
+
+# --- Read Initial State Before Loop ---
+# Read initial trigger state to avoid printing the resting state at start
+initial_left_trigger_val = 0.0
+initial_right_trigger_val = 0.0
+if joystick.get_numaxes() > AXIS_LEFT_TRIGGER:
+    initial_left_trigger_val = normalize_trigger(joystick.get_axis(AXIS_LEFT_TRIGGER))
+if joystick.get_numaxes() > AXIS_RIGHT_TRIGGER:
+    initial_right_trigger_val = normalize_trigger(joystick.get_axis(AXIS_RIGHT_TRIGGER))
+last_triggers = (initial_left_trigger_val, initial_right_trigger_val) # Initialize with actual starting values
+
+# Initialize was_triggers_active based on the *actual* initial state
+was_triggers_active = last_triggers[0] > TRIGGER_THRESHOLD or last_triggers[1] > TRIGGER_THRESHOLD
 
 # --- Main Loop ---
 try:
