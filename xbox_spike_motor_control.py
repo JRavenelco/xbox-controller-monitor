@@ -92,37 +92,62 @@ def send_spike_command(command, expect_prompt=True, timeout=SERIAL_TIMEOUT):
 
         if not expect_prompt:
             time.sleep(0.05) # Pequeña pausa si no esperamos respuesta
-            return True, ""
+            return True, "" # Return empty string for success message
 
         # Leer respuesta hasta encontrar prompt o timeout
         response = b""
         start_time = time.time()
         while time.time() - start_time < timeout:
             if spike_serial.in_waiting > 0:
-                chunk = spike_serial.read(spike_serial.in_waiting)
-                response += chunk
+                try:
+                    chunk = spike_serial.read(spike_serial.in_waiting)
+                    if chunk: # Asegurarse que no es None o vacío si read devuelve eso
+                         response += chunk
+                except serial.SerialException as read_err:
+                     # Error durante la lectura
+                     print(f"Error serial durante la lectura para comando '{command}': {read_err}")
+                     return False, f"Serial read error: {read_err}"
+                except Exception as read_err:
+                     # Otro error durante la lectura
+                     print(f"Error inesperado durante la lectura para comando '{command}': {read_err}")
+                     return False, f"Unexpected read error: {read_err}"
+
                 #print(f"Read chunk: {chunk}") # Debug
                 if REPL_PROMPT in response:
                     #print(f"Prompt detected. Full response: {response.decode(errors='ignore')}") # Debug
+                    response_str = response.decode(errors='ignore')
+                    output_before_prompt = response_str.split(REPL_PROMPT.decode())[0] # Split decoded string
+
                     # Comprobar si hubo un error antes del prompt
-                    for error_indicator in ERROR_INDICATORS:
-                        if error_indicator in response.split(REPL_PROMPT)[0]: # Buscar error antes del prompt
-                             print(f"Error detectado en respuesta del Hub:\n{response.decode(errors='ignore')}")
-                             return False, response.decode(errors='ignore')
-                    return True, response.decode(errors='ignore').split(REPL_PROMPT)[0].strip() # Devolver salida antes del prompt
+                    error_detected = False
+                    for error_indicator_bytes in ERROR_INDICATORS:
+                        # Comparar en bytes o decodificar indicador si es necesario
+                        # Aquí asumimos que output_before_prompt (string) puede contener el error
+                        # Decodificamos el indicador para buscarlo en la cadena
+                        error_indicator_str = error_indicator_bytes.decode(errors='ignore')
+                        if error_indicator_str in output_before_prompt:
+                             print(f"Error detectado en respuesta del Hub:\n{response_str}")
+                             # Devolver toda la respuesta decodificada como mensaje de error
+                             return False, str(response_str) # Asegurar string
+                    # Si no hubo error, devolver la salida antes del prompt
+                    return True, str(output_before_prompt.strip()) # Asegurar string
             time.sleep(0.01) # Pequeña pausa para no saturar CPU
 
+        # Timeout case:
+        timeout_msg = response.decode(errors='ignore')
         print(f"Timeout esperando prompt para comando: {command}")
-        print(f"Respuesta parcial recibida: {response.decode(errors='ignore')}")
-        return False, response.decode(errors='ignore')
+        print(f"Respuesta parcial recibida: {timeout_msg}")
+        return False, str(timeout_msg) # Asegurar string
 
     except serial.SerialException as e:
         print(f"Error serial al enviar/recibir comando '{command}': {e}")
-        return False, str(e)
+        return False, str(e) # str(e) es seguro
     except Exception as e:
-        print(f"Error inesperado en send_spike_command: {e}")
-        return False, str(e)
-
+        # Captura cualquier otra excepción, incluyendo el TypeError original si ocurre aquí
+        error_details = f"Unexpected error type: {type(e)}, content: {e}"
+        print(f"Error inesperado en send_spike_command ({command}): {error_details}")
+        # Devolver un string formateado para asegurar que es un string
+        return False, f"Caught Exception in send_spike_command: {error_details}"
 
 # --- Enviar comandos iniciales al Spike Hub ---
 print("Configurando Spike Hub (importando módulos)...")
