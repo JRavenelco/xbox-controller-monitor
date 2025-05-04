@@ -38,7 +38,7 @@ pygame.display.set_mode((1, 1)) # Necesario para el bucle de eventos
 
 print("Detectando control...")
 joystick_count = pygame.joystick.get_count()
-if joystick_count == 0:
+if (joystick_count == 0):
     print("Error: No se detectaron controles.")
     pygame.quit()
     exit()
@@ -59,7 +59,12 @@ try:
     time.sleep(1) # Dar tiempo al puerto serial
     # Limpiar cualquier salida inicial del Hub (ej. banner de MicroPython)
     spike_serial.reset_input_buffer()
-    initial_output = spike_serial.read_until(REPL_PROMPT, timeout=SERIAL_TIMEOUT*2)
+    # Leer hasta el prompt usando el timeout global del objeto Serial
+    # Aumentamos temporalmente el timeout global para esta lectura inicial
+    original_timeout = spike_serial.timeout
+    spike_serial.timeout = SERIAL_TIMEOUT * 2
+    initial_output = spike_serial.read_until(REPL_PROMPT)
+    spike_serial.timeout = original_timeout # Restaurar timeout original
     #print(f"Initial Hub output: {initial_output.decode(errors='ignore')}") # Debug
     if REPL_PROMPT not in initial_output:
          print("Advertencia: No se detectó el prompt inicial del Hub. Puede haber problemas.")
