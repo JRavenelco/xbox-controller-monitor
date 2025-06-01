@@ -1,4 +1,4 @@
-import pygame
+import pygame # type: ignore
 import time
 import os
 import serial
@@ -23,6 +23,12 @@ MAX_MOTOR_SPEED = 1000 # Ajusta según tu motor y preferencia
 MOTOR_STOP_THRESHOLD_PERCENT = 2 # Porcentaje de MAX_MOTOR_SPEED por debajo del cual se considera 0
 MOTOR_COMMAND_INTERVAL = 0.05 # Segundos - Intervalo mínimo entre comandos de velocidad al Spike
 DEBOUNCE_THRESHOLD_PERCENT = 1 # Porcentaje de cambio mínimo para enviar nuevo comando
+INITIAL_HUB_WAIT_TIME = 2.5 # Segundos - Slightly reduced wait time (adjust if needed)
+INITIAL_PROMPT_TIMEOUT = 5.0 # Segundos - Timeout específico para leer el prompt inicial
+INITIAL_STOP_RETRIES = 3 # Número de intentos para el stop inicial
+FINAL_STOP_RETRIES = 2 # Número de intentos para el stop final
+STOP_RETRY_DELAY = 0.2 # Segundos - Pausa entre reintentos de stop
+POST_IMPORT_DELAY = 0.2 # Segundos - Pause after import commands
 
 # --- Constantes Internas ---
 MOTOR_STOP_THRESHOLD_SPEED = int(MAX_MOTOR_SPEED * (MOTOR_STOP_THRESHOLD_PERCENT / 100.0))
@@ -51,30 +57,7 @@ if joystick.get_numaxes() <= max(AXIS_LEFT_TRIGGER, AXIS_RIGHT_TRIGGER):
     pygame.quit()
     exit()
 
-# --- Inicialización Serial ---
-spike_serial = None
-print(f"Conectando al Spike Hub en {SPIKE_SERIAL_PORT}...")
-try:
-    spike_serial = serial.Serial(SPIKE_SERIAL_PORT, SPIKE_BAUD_RATE, timeout=SERIAL_TIMEOUT)
-    time.sleep(1) # Dar tiempo al puerto serial
-    # Limpiar cualquier salida inicial del Hub (ej. banner de MicroPython)
-    spike_serial.reset_input_buffer()
-    # Leer hasta el prompt usando el timeout global del objeto Serial
-    # Aumentamos temporalmente el timeout global para esta lectura inicial
-    original_timeout = spike_serial.timeout
-    spike_serial.timeout = SERIAL_TIMEOUT * 2
-    initial_output = spike_serial.read_until(REPL_PROMPT)
-    spike_serial.timeout = original_timeout # Restaurar timeout original
-    #print(f"Initial Hub output: {initial_output.decode(errors='ignore')}") # Debug
-    if REPL_PROMPT not in initial_output:
-         print("Advertencia: No se detectó el prompt inicial del Hub. Puede haber problemas.")
-    print("Conexión serial establecida.")
-except serial.SerialException as e:
-    print(f"Error al abrir el puerto serial: {e}")
-    if spike_serial:
-        spike_serial.close()
-    pygame.quit()
-    exit()
+# --- Definición de Funciones ---
 
 def send_spike_command(command, expect_prompt=True, timeout=SERIAL_TIMEOUT):
     """Envía un comando al Spike Hub y opcionalmente espera el prompt."""
@@ -149,22 +132,86 @@ def send_spike_command(command, expect_prompt=True, timeout=SERIAL_TIMEOUT):
         # Devolver un string formateado para asegurar que es un string
         return False, f"Caught Exception in send_spike_command: {error_details}"
 
-# --- Enviar comandos iniciales al Spike Hub ---
-print("Configurando Spike Hub (importando módulos)...")
-success, _ = send_spike_command('import motor')
-if not success: print("Error importando 'motor'")
-success, _ = send_spike_command('from hub import port')
-if not success: print("Error importando 'port'")
-# Opcional: Detener el motor al inicio por si acaso
-success, _ = send_spike_command(f'motor.stop(port.{MOTOR_PORT_LETTER})')
-if not success: print("Error enviando stop inicial")
-
-print("Spike Hub listo.")
-
-# --- Helper Function ---
 def normalize_trigger(value):
     """Convierte valor de eje de gatillo Pygame (-1 a 1) a 0.0 a 1.0"""
     return (value + 1.0) / 2.0
+
+# --- Inicialización Serial ---
+spike_serial = None
+print(f"Conectando al Spike Hub en {SPIKE_SERIAL_PORT}...")
+try:
+    spike_serial = serial.Serial(SPIKE_SERIAL_PORT, SPIKE_BAUD_RATE, timeout=SERIAL_TIMEOUT)
+    print(f"Esperando {INITIAL_HUB_WAIT_TIME}s para que el Hub inicialice...")
+    time.sleep(INITIAL_HUB_WAIT_TIME)
+
+    spike_serial.reset_input_buffer()
+    print(f"Intentando leer prompt inicial del Hub (timeout: {INITIAL_PROMPT_TIMEOUT}s)...")
+    initial_output = b""
+    start_time = time.time()
+    prompt_detected = False
+    while time.time() - start_time < INITIAL_PROMPT_TIMEOUT:
+         if spike_serial.in_waiting > 0:
+              try:
+                   chunk = spike_serial.read(spike_serial.in_waiting)
+                   if chunk: initial_output += chunk
+              except Exception as read_err:
+                   print(f"Error leyendo salida inicial: {read_err}")
+                   break
+              if REPL_PROMPT in initial_output:
+                   print("Prompt inicial del Hub detectado.")
+                   prompt_detected = True
+                   break
+         time.sleep(0.1)
+
+    if not prompt_detected:
+         print("Advertencia: No se detectó el prompt inicial del Hub. La comunicación puede ser inestable.")
+    else:
+         print("Conexión serial establecida y prompt detectado.")
+
+    # --- Enviar comandos iniciales al Spike Hub ---
+    print("Configurando Spike Hub (importando módulos)...")
+    success_import_motor, _ = send_spike_command('import motor')
+    if not success_import_motor: print("Advertencia: Fallo al importar 'motor'")
+    success_import_hub, _ = send_spike_command('from hub import port')
+    if not success_import_hub: print("Advertencia: Fallo al importar 'port'")
+
+    # Add a small delay after imports before trying to stop
+    print(f"Pausa de {POST_IMPORT_DELAY}s después de imports...")
+    time.sleep(POST_IMPORT_DELAY)
+
+    print(f"Intentando parada inicial del motor ({INITIAL_STOP_RETRIES} intentos)...")
+    stopped_ok = False
+    for i in range(INITIAL_STOP_RETRIES):
+        print(f" Intento de parada inicial {i+1}/{INITIAL_STOP_RETRIES}...")
+        success_stop, resp = send_spike_command(f'motor.stop(port.{MOTOR_PORT_LETTER})', timeout=SERIAL_TIMEOUT * 2)
+        if success_stop:
+            print(f"  -> Comando stop inicial {i+1} enviado OK.")
+            stopped_ok = True
+            # break # Optional: Stop retrying if successful
+        else:
+            print(f"  -> Comando stop inicial {i+1} falló. Respuesta: {resp}")
+        if i < INITIAL_STOP_RETRIES - 1:
+             time.sleep(STOP_RETRY_DELAY)
+
+    if not stopped_ok:
+        print("Advertencia: Fallaron los intentos iniciales de detener el motor.")
+    else:
+        print("Comando(s) de parada inicial enviados.")
+
+    print("Spike Hub listo.")
+
+except serial.SerialException as e:
+    print(f"Error al abrir el puerto serial: {e}")
+    if spike_serial:
+        spike_serial.close()
+    pygame.quit()
+    exit()
+except Exception as e: # Catch other potential init errors
+    print(f"Error inesperado durante la inicialización: {e}")
+    if spike_serial and spike_serial.is_open:
+        spike_serial.close()
+    pygame.quit()
+    exit()
 
 # --- Variables de Estado ---
 last_sent_velocity = 0
@@ -261,15 +308,34 @@ finally:
     # --- Limpieza ---
     print("Deteniendo motor y cerrando conexiones...")
     if spike_serial and spike_serial.is_open:
-        print("Enviando comando final motor.stop()...")
-        # Intentar detener el motor de forma fiable
-        success, _ = send_spike_command(f'motor.stop(port.{MOTOR_PORT_LETTER})', timeout=SERIAL_TIMEOUT*2)
-        if not success:
-             print("Advertencia: No se pudo confirmar el comando final de parada.")
-        # Intentar un segundo stop por si acaso
-        time.sleep(0.1)
-        send_spike_command(f'motor.stop(port.{MOTOR_PORT_LETTER})', expect_prompt=False) # Enviar sin esperar
-        time.sleep(0.1)
+        print(f"Enviando comando final motor.stop() ({FINAL_STOP_RETRIES} intentos)...")
+        # Use a longer timeout and retries for the final stop as well
+        final_stop_success = False
+        for i in range(FINAL_STOP_RETRIES):
+             print(f" Intento de parada final {i+1}/{FINAL_STOP_RETRIES}...")
+             # Use a significantly longer timeout for final stop
+             success, resp = send_spike_command(f'motor.stop(port.{MOTOR_PORT_LETTER})', timeout=SERIAL_TIMEOUT * 3)
+             if success:
+                  print(f"  -> Comando stop final {i+1} enviado OK.")
+                  final_stop_success = True
+                  break # Stop trying if successful
+             else:
+                  print(f"  -> Comando stop final {i+1} falló. Respuesta: {resp}")
+             if i < FINAL_STOP_RETRIES - 1:
+                  time.sleep(STOP_RETRY_DELAY)
+
+        if not final_stop_success:
+             print("Advertencia: No se pudo confirmar el comando final de parada. Enviando una última vez sin esperar.")
+             # Send one last time without waiting for response as a fallback
+             try:
+                  final_cmd = f'motor.stop(port.{MOTOR_PORT_LETTER})\r\n'
+                  spike_serial.write(final_cmd.encode())
+                  spike_serial.flush()
+                  time.sleep(0.1) # Brief pause after sending
+             except Exception as final_write_err:
+                  print(f"Error en el último intento de envío de stop: {final_write_err}")
+
+        time.sleep(0.1) # Wait a bit after sending stop attempts
         spike_serial.close()
         print("Puerto serial cerrado.")
     else:
